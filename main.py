@@ -6,18 +6,47 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "BOT_TOKEN"  # ← ОБЯЗАТЕЛЬНО ВСТАВЬ СВОЙ ТОКЕН
+TOKEN = "BOT_TOKEN"  # ← ВСТАВЬ СВОЙ ТОКЕН
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-all_users = set()
+USERS_FILE = "users.txt"
+
+# ===================== ЗАГРУЗКА / СОХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ =====================
+def load_users() -> set:
+    users = set()
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.isdigit():
+                    users.add(int(line))
+        logging.info(f"Загружено пользователей из файла: {len(users)}")
+    except FileNotFoundError:
+        logging.info("Файл users.txt не найден, начинаем с пустого списка")
+    except Exception as e:
+        logging.error(f"Ошибка при загрузке пользователей: {e}")
+    return users
+
+
+def save_users(users: set):
+    try:
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
+            for user_id in users:
+                f.write(f"{user_id}\n")
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении пользователей: {e}")
+
+
+all_users = load_users()
 
 
 # ===================== ХЕНДЛЕРЫ =====================
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     all_users.add(message.from_user.id)
+    save_users(all_users)  # сохраняем сразу
     
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")]]
@@ -32,7 +61,9 @@ async def cmd_start(message: Message):
 
 @dp.message()
 async def save_user(message: Message):
-    all_users.add(message.from_user.id)
+    if message.from_user.id not in all_users:
+        all_users.add(message.from_user.id)
+        save_users(all_users)
 
 
 # ===================== НАДЁЖНАЯ АВТОРАССЫЛКА =====================
@@ -54,11 +85,11 @@ async def broadcaster():
 
     while True:
         try:
-            logging.info(f"Начинаем рассылку | Пользователей: {len(all_users)}")
+            logging.info(f"[РАССЫЛКА] Начинаем... Пользователей: {len(all_users)}")
             
             if not all_users:
-                logging.info("Пользователей нет, ждём...")
-                await asyncio.sleep(60)
+                logging.info("[РАССЫЛКА] Нет пользователей, ждём...")
+                await asyncio.sleep(30)
                 continue
 
             sent = 0
@@ -71,28 +102,24 @@ async def broadcaster():
                         disable_notification=True
                     )
                     sent += 1
-                    await asyncio.sleep(0.08)   # задержка между сообщениями
-                except Exception as e:
-                    # Тихо удаляем заблокированных пользователей
-                    all_users.discard(user_id)
-                    logging.debug(f"Пользователь {user_id} удалён из списка (ошибка: {e})")
+                    await asyncio.sleep(0.08)   # задержка
+                except Exception:
+                    all_users.discard(user_id)   # удаляем заблокированных
 
-            logging.info(f"Рассылка завершена. Успешно отправлено: {sent} сообщений")
+            save_users(all_users)  # сохраняем после каждой рассылки (на случай удалений)
+            logging.info(f"[РАССЫЛКА] Завершена. Успешно отправлено: {sent} сообщений")
 
         except Exception as e:
-            logging.error(f"Критическая ошибка в broadcaster: {e}")
-            await asyncio.sleep(10)  # если что-то сломалось — не падаем сразу
+            logging.error(f"[РАССЫЛКА] Критическая ошибка: {e}")
 
-        # === ВРЕМЯ МЕЖДУ РАССЫЛКАМИ ===
-        await asyncio.sleep(60)   # ← для теста оставь 60 (каждую минуту)
-        # После теста поменяй на 1800 (30 минут) или 10800 (3 часа)
+        await asyncio.sleep(60)   # ← Для теста = 60 секунд (каждую минуту)
 
 
 # ===================== ТЕСТОВАЯ РАССЫЛКА =====================
 @dp.message(Command("broadcast"))
 async def manual_broadcast(message: Message):
     if not all_users:
-        await message.answer("Пока нет пользователей.")
+        await message.answer("Нет пользователей для рассылки.")
         return
    
     text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
@@ -109,6 +136,7 @@ async def manual_broadcast(message: Message):
         except:
             all_users.discard(user_id)
    
+    save_users(all_users)
     await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent}")
 
 
@@ -116,11 +144,21 @@ async def manual_broadcast(message: Message):
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # Запускаем рассылку как отдельную задачу
-    asyncio.create_task(broadcaster())
-    
-    logging.info("Бот успешно запущен | Авторассылка активна")
-    await dp.start_polling(bot)
+    logging.info(f"Бот запущен | Пользователей в базе: {len(all_users)} | Авторассылка активна")
+
+    # Запускаем рассылку
+    broadcaster_task = asyncio.create_task(broadcaster())
+
+    try:
+        await dp.start_polling(bot)
+    except Exception as e:
+        logging.error(f"Ошибка polling: {e}")
+    finally:
+        broadcaster_task.cancel()
+        try:
+            await broadcaster_task
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
