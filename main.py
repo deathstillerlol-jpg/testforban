@@ -77,50 +77,62 @@ async def echo(message: Message):
 
 
 # ===================== РАССЫЛКА =====================
+# ===================== РАССЫЛКА (замени свою функцию broadcaster) =====================
 async def broadcaster():
-    await asyncio.sleep(30)  # пауза после запуска
+    await asyncio.sleep(20)  # пауза после старта
 
-    text = "Напоминание! 🔥\nБЫСТРЕЕ ПИШЕМ!\nПиши менеджеру прямо сейчас 👇"
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
-    ]])
+    text = (
+        "Напоминание! 🔥\n"
+        "БЫСТРЕЕ ПИШЕМ!\n"
+        "Пиши менеджеру прямо сейчас 👇"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
+        ]]
+    )
 
     while True:
-        users = get_all_users()
-        logging.info(f"Рассылка → найдено {len(users)} пользователей")
+        try:
+            users = get_all_users()
+            logging.info(f"Рассылка → найдено {len(users)} пользователей")
 
-        sent = 0
-        blocked = 0
+            sent = 0
+            blocked = 0
 
-        for user_id in users:
-            try:
-                await bot.send_message(
-                    user_id, text, reply_markup=keyboard, disable_notification=True
-                )
-                sent += 1
-                await asyncio.sleep(0.07)
-            except Exception as e:
-                err = str(e).lower()
-                if "blocked" in err or "forbidden" in err or "chat not found" in err:
-                    blocked += 1
-                else:
-                    logging.warning(f"Ошибка у {user_id}: {e}")
+            for user_id in users:
+                try:
+                    await bot.send_message(
+                        user_id, text, reply_markup=keyboard, disable_notification=True
+                    )
+                    sent += 1
+                    await asyncio.sleep(0.08)
+                except Exception as e:
+                    err = str(e).lower()
+                    if any(x in err for x in ["blocked", "forbidden", "chat not found"]):
+                        blocked += 1
+                    logging.warning(f"Ошибка отправки {user_id}: {e}")
 
-        logging.info(f"Рассылка завершена: отправлено {sent}, заблокировали {blocked}")
+            logging.info(f"Рассылка завершена: отправлено {sent}, заблокировали {blocked}")
 
-        await asyncio.sleep(20)  # 3 часа
+        except Exception as e:
+            logging.error(f"Ошибка в broadcaster: {e}")
+
+        # Для теста — 20 секунд. Когда заработает, поставь 1800 (30 мин) или 10800 (3 часа)
+        await asyncio.sleep(20)
 
 
-# ===================== ЗАПУСК =====================
+# ===================== ЗАПУСК (замени свою функцию main) =====================
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
+    # Запускаем рассылку
     asyncio.create_task(broadcaster())
 
-    logging.info("Бот запущен • polling + рассылка каждые 3 часа (bothost.ru)")
+    logging.info("Бот запущен • polling + рассылка (bothost.ru)")
 
-    # Важно для bothost.ru и хостингов с SIGTERM
+    # Критично для bothost.ru
     await dp.start_polling(bot, handle_signals=False)
 
 
