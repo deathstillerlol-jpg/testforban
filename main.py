@@ -21,11 +21,9 @@ def load_users() -> set:
             for line in f:
                 if line.strip().isdigit():
                     users.add(int(line.strip()))
-        logging.info(f"Загружено {len(users)} пользователей из файла")
+        logging.info(f"Загружено пользователей: {len(users)}")
     except FileNotFoundError:
-        logging.info("Файл users.txt не найден — начинаем с нуля")
-    except Exception as e:
-        logging.error(f"Ошибка загрузки пользователей: {e}")
+        logging.info("users.txt не найден")
     return users
 
 
@@ -35,7 +33,7 @@ def save_users(users: set):
             for uid in sorted(users):
                 f.write(f"{uid}\n")
     except Exception as e:
-        logging.error(f"Ошибка сохранения пользователей: {e}")
+        logging.error(f"Ошибка сохранения: {e}")
 
 
 all_users = load_users()
@@ -47,14 +45,14 @@ async def cmd_start(message: Message):
     all_users.add(message.from_user.id)
     save_users(all_users)
     
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")]]
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")
+    ]])
     
     await message.answer(
         "Здравствуйте! Приветствуем вас в сервисе для продажи пушкинских карт! 👋\n"
         "Нажми кнопку ниже, чтобы перейти в диалог к менеджеру:",
-        reply_markup=keyboard
+        reply_markup=kb
     )
 
 
@@ -65,90 +63,86 @@ async def save_user(message: Message):
         save_users(all_users)
 
 
-# ===================== АВТОРАССЫЛКА =====================
+# ===================== ПРОСТАЯ АВТОРАССЫЛКА =====================
 async def broadcaster():
-    await asyncio.sleep(8)
+    await asyncio.sleep(10)
 
-    text = (
-        "Напоминание! 🔥\n\n"
-        "БЫСТРЕЕ ПИШЕМ!\n"
-        "Пиши менеджеру прямо сейчас 👇"
-    )
-   
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(
-            text="НАПИСАТЬ МЕНЕДЖЕРУ ДЛЯ ПРОДАЖИ →", 
-            url="https://t.me/sasha_teatr"
-        )]]
-    )
+    text = "Напоминание! 🔥\n\nБЫСТРЕЕ ПИШЕМ!\nПиши менеджеру прямо сейчас 👇"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ ДЛЯ ПРОДАЖИ →", url="https://t.me/sasha_teatr")
+    ]])
 
     while True:
-        try:
-            logging.info(f"[РАССЫЛКА] Запуск | Пользователей: {len(all_users)}")
-            
-            if not all_users:
-                await asyncio.sleep(30)
-                continue
+        logging.info(f"[РАССЫЛКА] Начинаем | Пользователей: {len(all_users)}")
+        
+        if not all_users:
+            logging.info("[РАССЫЛКА] Нет пользователей")
+            await asyncio.sleep(60)
+            continue
 
-            sent = 0
-            for user_id in list(all_users):
-                try:
-                    await bot.send_message(
-                        user_id,
-                        text,
-                        reply_markup=keyboard,
-                        disable_notification=True
-                    )
-                    sent += 1
-                    await asyncio.sleep(0.07)
-                except Exception:
-                    all_users.discard(user_id)
+        sent = 0
+        for user_id in list(all_users):
+            try:
+                await bot.send_message(
+                    user_id, text, reply_markup=kb, disable_notification=True
+                )
+                sent += 1
+                await asyncio.sleep(0.08)
+            except Exception:
+                all_users.discard(user_id)
 
-            save_users(all_users)
-            logging.info(f"[РАССЫЛКА] Завершена → Отправлено: {sent}")
+        save_users(all_users)
+        logging.info(f"[РАССЫЛКА] Завершена | Отправлено: {sent}")
 
-        except Exception as e:
-            logging.error(f"[РАССЫЛКА] Неожиданная ошибка: {e}")
-
-        await asyncio.sleep(60)   # ← Для теста оставь 60 (каждую минуту)
+        await asyncio.sleep(180)   # ← Для теста поставь 60 (каждую минуту)
 
 
 # ===================== ТЕСТОВАЯ РАССЫЛКА =====================
 @dp.message(Command("broadcast"))
 async def manual_broadcast(message: Message):
     if not all_users:
-        await message.answer("Нет пользователей.")
+        await message.answer("Нет пользователей")
         return
 
     text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")]]
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
+    ]])
 
     sent = 0
     for user_id in list(all_users):
         try:
-            await bot.send_message(user_id, text, reply_markup=keyboard, disable_notification=True)
+            await bot.send_message(user_id, text, reply_markup=kb, disable_notification=True)
             sent += 1
             await asyncio.sleep(0.05)
         except:
             all_users.discard(user_id)
 
     save_users(all_users)
-    await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent}")
+    await message.answer(f"✅ Отправлено: {sent}")
 
 
 # ===================== ЗАПУСК =====================
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    logging.info(f"Бот запущен | Пользователей в базе: {len(all_users)}")
+    logging.info(f"Бот запущен | Пользователей: {len(all_users)}")
+
+    # Запускаем рассылку в фоне
+    task = asyncio.create_task(broadcaster())
 
     try:
-        async with asyncio.TaskGroup() as tg:   # Python 3.11+
-            tg.create_task(broadcaster())
-            tg.create_task(dp.start_polling(bot))
-    except* Exception as exc:
-        logging.error(f"Ошибка в TaskGroup: {exc}")
+        await dp.start_polling(bot)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logging.error(f"Ошибка в polling: {e}")
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
