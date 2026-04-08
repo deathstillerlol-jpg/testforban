@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 TOKEN = "BOT_TOKEN"  # ← ВСТАВЬ СВОЙ ТОКЕН
 
@@ -13,30 +13,29 @@ dp = Dispatcher()
 
 USERS_FILE = "users.txt"
 
-# ===================== ЗАГРУЗКА / СОХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ =====================
+
 def load_users() -> set:
     users = set()
     try:
         with open(USERS_FILE, "r", encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if line.isdigit():
-                    users.add(int(line))
-        logging.info(f"Загружено пользователей из файла: {len(users)}")
+                if line.strip().isdigit():
+                    users.add(int(line.strip()))
+        logging.info(f"Загружено {len(users)} пользователей из файла")
     except FileNotFoundError:
-        logging.info("Файл users.txt не найден, начинаем с пустого списка")
+        logging.info("Файл users.txt не найден — начинаем с нуля")
     except Exception as e:
-        logging.error(f"Ошибка при загрузке пользователей: {e}")
+        logging.error(f"Ошибка загрузки пользователей: {e}")
     return users
 
 
 def save_users(users: set):
     try:
         with open(USERS_FILE, "w", encoding="utf-8") as f:
-            for user_id in users:
-                f.write(f"{user_id}\n")
+            for uid in sorted(users):
+                f.write(f"{uid}\n")
     except Exception as e:
-        logging.error(f"Ошибка при сохранении пользователей: {e}")
+        logging.error(f"Ошибка сохранения пользователей: {e}")
 
 
 all_users = load_users()
@@ -46,7 +45,7 @@ all_users = load_users()
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     all_users.add(message.from_user.id)
-    save_users(all_users)  # сохраняем сразу
+    save_users(all_users)
     
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")]]
@@ -66,9 +65,9 @@ async def save_user(message: Message):
         save_users(all_users)
 
 
-# ===================== НАДЁЖНАЯ АВТОРАССЫЛКА =====================
+# ===================== АВТОРАССЫЛКА =====================
 async def broadcaster():
-    await asyncio.sleep(10)  # пауза после запуска
+    await asyncio.sleep(8)
 
     text = (
         "Напоминание! 🔥\n\n"
@@ -85,10 +84,9 @@ async def broadcaster():
 
     while True:
         try:
-            logging.info(f"[РАССЫЛКА] Начинаем... Пользователей: {len(all_users)}")
+            logging.info(f"[РАССЫЛКА] Запуск | Пользователей: {len(all_users)}")
             
             if not all_users:
-                logging.info("[РАССЫЛКА] Нет пользователей, ждём...")
                 await asyncio.sleep(30)
                 continue
 
@@ -96,37 +94,37 @@ async def broadcaster():
             for user_id in list(all_users):
                 try:
                     await bot.send_message(
-                        user_id, 
-                        text, 
+                        user_id,
+                        text,
                         reply_markup=keyboard,
                         disable_notification=True
                     )
                     sent += 1
-                    await asyncio.sleep(0.08)   # задержка
+                    await asyncio.sleep(0.07)
                 except Exception:
-                    all_users.discard(user_id)   # удаляем заблокированных
+                    all_users.discard(user_id)
 
-            save_users(all_users)  # сохраняем после каждой рассылки (на случай удалений)
-            logging.info(f"[РАССЫЛКА] Завершена. Успешно отправлено: {sent} сообщений")
+            save_users(all_users)
+            logging.info(f"[РАССЫЛКА] Завершена → Отправлено: {sent}")
 
         except Exception as e:
-            logging.error(f"[РАССЫЛКА] Критическая ошибка: {e}")
+            logging.error(f"[РАССЫЛКА] Неожиданная ошибка: {e}")
 
-        await asyncio.sleep(60)   # ← Для теста = 60 секунд (каждую минуту)
+        await asyncio.sleep(60)   # ← Для теста оставь 60 (каждую минуту)
 
 
 # ===================== ТЕСТОВАЯ РАССЫЛКА =====================
 @dp.message(Command("broadcast"))
 async def manual_broadcast(message: Message):
     if not all_users:
-        await message.answer("Нет пользователей для рассылки.")
+        await message.answer("Нет пользователей.")
         return
-   
+
     text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")]]
     )
-   
+
     sent = 0
     for user_id in list(all_users):
         try:
@@ -135,7 +133,7 @@ async def manual_broadcast(message: Message):
             await asyncio.sleep(0.05)
         except:
             all_users.discard(user_id)
-   
+
     save_users(all_users)
     await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent}")
 
@@ -143,22 +141,14 @@ async def manual_broadcast(message: Message):
 # ===================== ЗАПУСК =====================
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    
-    logging.info(f"Бот запущен | Пользователей в базе: {len(all_users)} | Авторассылка активна")
-
-    # Запускаем рассылку
-    broadcaster_task = asyncio.create_task(broadcaster())
+    logging.info(f"Бот запущен | Пользователей в базе: {len(all_users)}")
 
     try:
-        await dp.start_polling(bot)
-    except Exception as e:
-        logging.error(f"Ошибка polling: {e}")
-    finally:
-        broadcaster_task.cancel()
-        try:
-            await broadcaster_task
-        except asyncio.CancelledError:
-            pass
+        async with asyncio.TaskGroup() as tg:   # Python 3.11+
+            tg.create_task(broadcaster())
+            tg.create_task(dp.start_polling(bot))
+    except* Exception as exc:
+        logging.error(f"Ошибка в TaskGroup: {exc}")
 
 
 if __name__ == "__main__":
