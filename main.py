@@ -6,7 +6,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "ТОКЕН_БОТА_СЮДА"   # ← ВСТАВЬ СВОЙ ТОКЕН
+TOKEN = "BOT_TOKEN"   # ← ВСТАВЬ СВОЙ ТОКЕН
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
