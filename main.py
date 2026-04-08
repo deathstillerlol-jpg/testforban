@@ -6,7 +6,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "BOT_TOKEN"   # ← ВСТАВЬ СВОЙ ТОКЕН
+TOKEN = "BOT_TOKEN"  # ← ВСТАВЬ СВОЙ ТОКЕН
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -15,7 +15,6 @@ all_users = set()
 
 
 # ===================== ХЕНДЛЕРЫ =====================
-
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     all_users.add(message.from_user.id)
@@ -37,57 +36,27 @@ async def save_user(message: Message):
     all_users.add(message.from_user.id)
 
 
-# ===================== КОМАНДА ДЛЯ ТЕСТА =====================
-
-@dp.message(Command("broadcast"))
-async def manual_broadcast(message: Message):
-    """Принудительная рассылка по команде /broadcast (для теста)"""
-    if not all_users:
-        await message.answer("Пока нет пользователей для рассылки.")
-        return
-    
-    text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")]]
-    )
-    
-    sent = 0
-    for user_id in list(all_users):
-        try:
-            await bot.send_message(user_id, text, reply_markup=keyboard, disable_notification=True)
-            sent += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            all_users.discard(user_id)
-    
-    await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent} сообщений")
-
-
-# ===================== АВТОРАССЫЛКА =====================
-
+# ===================== ПРОСТАЯ АВТОРАССЫЛКА =====================
 async def broadcaster():
-    await asyncio.sleep(10)  # небольшая пауза после запуска
-    
+    await asyncio.sleep(15)  # пауза после запуска бота
+
     text = (
         "Напоминание! 🔥\n\n"
         "БЫСТРЕЕ ПИШЕМ!\n"
         "Пиши менеджеру прямо сейчас 👇"
     )
-    
+   
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ ДЛЯ ПРОДАЖИ →", url="https://t.me/sasha_teatr")]]
+        inline_keyboard=[[InlineKeyboardButton(
+            text="НАПИСАТЬ МЕНЕДЖЕРУ ДЛЯ ПРОДАЖИ →", 
+            url="https://t.me/sasha_teatr"
+        )]]
     )
-    
+
     while True:
-        logging.info(f"Авторассылка запущена | Пользователей: {len(all_users)}")
-        
-        if not all_users:
-            logging.info("Нет пользователей для рассылки")
-            await asyncio.sleep(60)
-            continue
+        logging.info(f"Начинаем рассылку | Пользователей: {len(all_users)}")
         
         sent = 0
-        blocked = 0
         for user_id in list(all_users):
             try:
                 await bot.send_message(
@@ -97,22 +66,45 @@ async def broadcaster():
                     disable_notification=True
                 )
                 sent += 1
-                await asyncio.sleep(0.07)
-            except Exception as e:
-                blocked += 1
-                all_users.discard(user_id)
+                await asyncio.sleep(0.07)   # задержка между сообщениями
+            except:
+                all_users.discard(user_id)  # если пользователь заблокировал бота
+
+        logging.info(f"Рассылка завершена. Успешно отправлено: {sent} сообщений")
         
-        logging.info(f"Рассылка завершена → Отправлено: {sent} | Заблокировано/ошибок: {blocked}")
-        
-        await asyncio.sleep(1800)   # ← Каждые 30 минут (для теста). Потом поставишь 10800 (3 часа)
+        await asyncio.sleep(1800)  # Каждые 30 минут (для теста можно поставить 60)
+
+
+# ===================== КОМАНДА ДЛЯ ТЕСТА =====================
+@dp.message(Command("broadcast"))
+async def manual_broadcast(message: Message):
+    """Принудительная рассылка по команде /broadcast"""
+    if not all_users:
+        await message.answer("Пока нет пользователей для рассылки.")
+        return
+   
+    text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")]]
+    )
+   
+    sent = 0
+    for user_id in list(all_users):
+        try:
+            await bot.send_message(user_id, text, reply_markup=keyboard, disable_notification=True)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except:
+            all_users.discard(user_id)
+   
+    await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent} сообщений")
 
 
 # ===================== ЗАПУСК =====================
-
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
-    asyncio.create_task(broadcaster())   # Запускаем рассылку
+    asyncio.create_task(broadcaster())  # Запускаем авторассылку
     
     logging.info("Бот запущен | Авторассылка активна")
     await dp.start_polling(bot)
