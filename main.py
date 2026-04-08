@@ -98,7 +98,7 @@ async def cmd_start(message: Message):
     )
 
     await message.answer(
-        "Здравствуйте! Приветствуем вас! 👋\n"
+        "Здравствуйте! Приветствуем вас в сервисе для продажи пушкинских карт! 👋\n"
         "Нажми кнопку ниже, чтобы перейти в диалог к менеджеру:",
         reply_markup=keyboard
     )
@@ -123,7 +123,7 @@ async def broadcaster():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="НАПИСАТЬ МЕНЕДЖЕРУ →",
+                    text="НАПИСАТЬ МЕНЕДЖЕРУ ДЛЯ ПРОДАЖИ →",
                     url="https://t.me/sasha_teatr"
                 )
             ]
