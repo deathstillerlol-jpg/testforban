@@ -6,7 +6,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "BOT_TOKEN"  # ← ВСТАВЬ СВОЙ ТОКЕН
+TOKEN = "BOT_TOKEN"  # ← ОБЯЗАТЕЛЬНО ВСТАВЬ СВОЙ ТОКЕН
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -32,13 +32,12 @@ async def cmd_start(message: Message):
 
 @dp.message()
 async def save_user(message: Message):
-    """Сохраняем всех, кто пишет боту"""
     all_users.add(message.from_user.id)
 
 
-# ===================== ПРОСТАЯ АВТОРАССЫЛКА =====================
+# ===================== НАДЁЖНАЯ АВТОРАССЫЛКА =====================
 async def broadcaster():
-    await asyncio.sleep(15)  # пауза после запуска бота
+    await asyncio.sleep(10)  # пауза после запуска
 
     text = (
         "Напоминание! 🔥\n\n"
@@ -54,33 +53,46 @@ async def broadcaster():
     )
 
     while True:
-        logging.info(f"Начинаем рассылку | Пользователей: {len(all_users)}")
-        
-        sent = 0
-        for user_id in list(all_users):
-            try:
-                await bot.send_message(
-                    user_id, 
-                    text, 
-                    reply_markup=keyboard,
-                    disable_notification=True
-                )
-                sent += 1
-                await asyncio.sleep(0.07)   # задержка между сообщениями
-            except:
-                all_users.discard(user_id)  # если пользователь заблокировал бота
+        try:
+            logging.info(f"Начинаем рассылку | Пользователей: {len(all_users)}")
+            
+            if not all_users:
+                logging.info("Пользователей нет, ждём...")
+                await asyncio.sleep(60)
+                continue
 
-        logging.info(f"Рассылка завершена. Успешно отправлено: {sent} сообщений")
-        
-        await asyncio.sleep(60)  # Каждые 30 минут (для теста можно поставить 60)
+            sent = 0
+            for user_id in list(all_users):
+                try:
+                    await bot.send_message(
+                        user_id, 
+                        text, 
+                        reply_markup=keyboard,
+                        disable_notification=True
+                    )
+                    sent += 1
+                    await asyncio.sleep(0.08)   # задержка между сообщениями
+                except Exception as e:
+                    # Тихо удаляем заблокированных пользователей
+                    all_users.discard(user_id)
+                    logging.debug(f"Пользователь {user_id} удалён из списка (ошибка: {e})")
+
+            logging.info(f"Рассылка завершена. Успешно отправлено: {sent} сообщений")
+
+        except Exception as e:
+            logging.error(f"Критическая ошибка в broadcaster: {e}")
+            await asyncio.sleep(10)  # если что-то сломалось — не падаем сразу
+
+        # === ВРЕМЯ МЕЖДУ РАССЫЛКАМИ ===
+        await asyncio.sleep(60)   # ← для теста оставь 60 (каждую минуту)
+        # После теста поменяй на 1800 (30 минут) или 10800 (3 часа)
 
 
-# ===================== КОМАНДА ДЛЯ ТЕСТА =====================
+# ===================== ТЕСТОВАЯ РАССЫЛКА =====================
 @dp.message(Command("broadcast"))
 async def manual_broadcast(message: Message):
-    """Принудительная рассылка по команде /broadcast"""
     if not all_users:
-        await message.answer("Пока нет пользователей для рассылки.")
+        await message.answer("Пока нет пользователей.")
         return
    
     text = "Тестовая рассылка! 🔥\nПиши менеджеру прямо сейчас 👇"
@@ -97,16 +109,17 @@ async def manual_broadcast(message: Message):
         except:
             all_users.discard(user_id)
    
-    await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent} сообщений")
+    await message.answer(f"✅ Тестовая рассылка завершена!\nОтправлено: {sent}")
 
 
 # ===================== ЗАПУСК =====================
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
-    asyncio.create_task(broadcaster())  # Запускаем авторассылку
+    # Запускаем рассылку как отдельную задачу
+    asyncio.create_task(broadcaster())
     
-    logging.info("Бот запущен | Авторассылка активна")
+    logging.info("Бот успешно запущен | Авторассылка активна")
     await dp.start_polling(bot)
 
 
