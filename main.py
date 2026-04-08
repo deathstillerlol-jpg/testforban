@@ -6,12 +6,25 @@ import sqlite3
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiohttp import web
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
+# ===================== НАСТРОЙКИ =====================
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN не найден в переменных окружения!")
+
+# Важно! Bothost.ru сам даёт публичный URL. Обычно он выглядит так:
+# https://твой-логин-бота.bothost.ru
+# Замени ниже на свой реальный домен от bothost
+BASE_WEBHOOK_URL = "http://nsk7.bothost.ru/api/webhooks/github"   # ← ИЗМЕНИ НА СВОЙ
+
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}"
+
+PORT = int(os.getenv("PORT", 8080))
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -23,12 +36,7 @@ DB_FILE = "users.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
     conn.commit()
     conn.close()
 
@@ -36,21 +44,18 @@ def init_db():
 def save_user(user_id: int):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    try:
-        cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-    finally:
-        conn.close()
+    cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+    conn.commit()
+    conn.close()
 
 
 def get_all_users() -> list[int]:
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    try:
-        cur.execute("SELECT user_id FROM users")
-        return [row[0] for row in cur.fetchall()]
-    finally:
-        conn.close()
+    cur.execute("SELECT user_id FROM users")
+    users = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return users
 
 
 init_db()
@@ -60,81 +65,81 @@ init_db()
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     save_user(message.from_user.id)
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")
     ]])
     await message.answer(
         "Здравствуйте! Приветствуем вас! 👋\n"
         "Нажми кнопку ниже, чтобы перейти в диалог к менеджеру:",
-        reply_markup=keyboard
+        reply_markup=kb
     )
 
 
 @dp.message()
-async def echo(message: Message):
-    save_user(message.from_user.id)   # сохраняем даже если не /start
-    await message.answer(f"Ты написал: {message.text}")
+async def any_message(message: Message):
+    save_user(message.from_user.id)
+    # await message.answer("Сообщение получено")  # можно раскомментировать
 
 
-# ===================== РАССЫЛКА =====================
-# ===================== РАССЫЛКА (замени свою функцию broadcaster) =====================
+# ===================== АВТОРАССЫЛКА =====================
 async def broadcaster():
-    await asyncio.sleep(20)  # пауза после старта
+    await asyncio.sleep(30)  # пауза после старта
 
-    text = (
-        "Напоминание! 🔥\n"
-        "БЫСТРЕЕ ПИШЕМ!\n"
-        "Пиши менеджеру прямо сейчас 👇"
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
-        ]]
-    )
+    text = "Напоминание! 🔥\n\nБЫСТРЕЕ ПИШЕМ!\nПиши менеджеру прямо сейчас 👇"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
+    ]])
 
     while True:
-        try:
-            users = get_all_users()
-            logging.info(f"Рассылка → найдено {len(users)} пользователей")
+        users = get_all_users()
+        logging.info(f"Рассылка → найдено {len(users)} пользователей")
 
-            sent = 0
-            blocked = 0
+        sent = 0
+        for user_id in users:
+            try:
+                await bot.send_message(
+                    user_id, text, reply_markup=kb, disable_notification=True
+                )
+                sent += 1
+                await asyncio.sleep(0.08)
+            except Exception:
+                pass  # игнорируем ошибки (заблокировал и т.д.)
 
-            for user_id in users:
-                try:
-                    await bot.send_message(
-                        user_id, text, reply_markup=keyboard, disable_notification=True
-                    )
-                    sent += 1
-                    await asyncio.sleep(0.08)
-                except Exception as e:
-                    err = str(e).lower()
-                    if any(x in err for x in ["blocked", "forbidden", "chat not found"]):
-                        blocked += 1
-                    logging.warning(f"Ошибка отправки {user_id}: {e}")
+        logging.info(f"Рассылка завершена: отправлено {sent}")
 
-            logging.info(f"Рассылка завершена: отправлено {sent}, заблокировали {blocked}")
-
-        except Exception as e:
-            logging.error(f"Ошибка в broadcaster: {e}")
-
-        # Для теста — 20 секунд. Когда заработает, поставь 1800 (30 мин) или 10800 (3 часа)
-        await asyncio.sleep(20)
+        await asyncio.sleep(20)   # ← Для теста 20 секунд. Потом поставь 1800 (30 мин) или 10800 (3 часа)
 
 
-# ===================== ЗАПУСК (замени свою функцию main) =====================
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
+# ===================== ЗАПУСК WEBHOOK =====================
+async def on_startup(bot: Bot):
+    await bot.set_webhook(
+        url=WEBHOOK_URL,
+        drop_pending_updates=True   # очищаем старые обновления
+    )
+    logging.info(f"Webhook успешно установлен: {WEBHOOK_URL}")
 
-    # Запускаем рассылку
+
+async def on_shutdown(bot: Bot):
+    await bot.delete_webhook()
+    logging.info("Webhook удалён")
+
+
+def main():
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+
+    # Запускаем рассылку в фоне
     asyncio.create_task(broadcaster())
 
-    logging.info("Бот запущен • polling + рассылка (bothost.ru)")
+    # Настраиваем aiohttp приложение
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
 
-    # Критично для bothost.ru
-    await dp.start_polling(bot, handle_signals=False)
+    setup_application(app, dp, bot=bot)
+
+    logging.info("Бот запущен на Webhook (bothost.ru)")
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
