@@ -95,7 +95,7 @@ async def broadcaster():
         save_users(all_users)
         logging.info(f"[РАССЫЛКА] Завершена | Отправлено: {sent}")
 
-        await asyncio.sleep(180)   # ← Для теста поставь 60 (каждую минуту)
+        await asyncio.sleep(60)   # ← Для теста поставь 60 (каждую минуту)
 
 
 # ===================== ТЕСТОВАЯ РАССЫЛКА =====================
