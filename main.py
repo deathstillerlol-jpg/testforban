@@ -66,7 +66,7 @@ init_db()
 async def cmd_start(message: Message):
     save_user(message.from_user.id)
     kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_ticket")
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ", url="https://t.me/sasha_teatr")
     ]])
     await message.answer(
         "Здравствуйте! Приветствуем вас! 👋\n"
@@ -87,7 +87,7 @@ async def broadcaster():
 
     text = "Напоминание! 🔥\n\nБЫСТРЕЕ ПИШЕМ!\nПиши менеджеру прямо сейчас 👇"
     kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_ticket")
+        InlineKeyboardButton(text="НАПИСАТЬ МЕНЕДЖЕРУ →", url="https://t.me/sasha_teatr")
     ]])
 
     while True:
